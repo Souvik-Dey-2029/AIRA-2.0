@@ -160,6 +160,27 @@ export class AudioStreamer {
     }, 50);
   }
 
+  public getAnalyser(): AnalyserNode | null {
+    return this.analyser;
+  }
+
+  public getContext(): AudioContext | null {
+    return this.context;
+  }
+
+  public getInstantVolume(): number {
+    if (!this.analyser || !this.volumeData) return 0;
+    this.analyser.getByteFrequencyData(this.volumeData);
+    let sum = 0;
+    // Focus primarily on vocal frequency bands (bins 4 to 40)
+    const upperLimit = Math.min(this.volumeData.length, 64);
+    for (let i = 2; i < upperLimit; i++) {
+      sum += this.volumeData[i];
+    }
+    const avg = sum / (upperLimit - 2);
+    return Math.min(1, avg / 110);
+  }
+
   async resume() {
     if (this.context?.state === "suspended") {
       await this.context.resume();
