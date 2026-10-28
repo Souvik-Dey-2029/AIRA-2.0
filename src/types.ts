@@ -21,12 +21,38 @@ export type AiraEmotion =
   | "PLAYFUL" 
   | "THOUGHTFUL" 
   | "CURIOUS" 
-  | "SUPPORTIVE";
+  | "SUPPORTIVE"
+  | "LAUGHING"
+  | "CRYING"
+  | "EGO"
+  | "POUTING"
+  | "SINGING"
+  | "ROMANTIC"
+  | "FLIRTY";
+
+export type BedroomMood = 
+  | "cozy_candle" 
+  | "romantic_crimson" 
+  | "cyber_neon" 
+  | "midnight_dream" 
+  | "warm_sunset" 
+  | "dim_sleep";
+
+export interface RememberedPerson {
+  name: string;
+  nickname?: string;
+  relation?: string;
+  favoriteThings?: string[];
+  memory?: string;
+  memories?: string[];
+  firstMetDate?: string;
+  lastUpdated?: string;
+}
 
 export interface NoteItem {
   id: string;
   content: string;
-  type: 'SONG' | 'NOTE' | 'REMINDER' | 'STATUS' | 'FUNNY';
+  type: 'SONG' | 'NOTE' | 'REMINDER' | 'STATUS' | 'FUNNY' | 'PERSON_MEMORY' | 'TIMER' | 'EMOTION';
   timestamp: string;
 }
 

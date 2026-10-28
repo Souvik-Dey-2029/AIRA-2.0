@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { SessionState, AiraEmotion } from "../types";
+import { SessionState, AiraEmotion, BedroomMood } from "../types";
 
 interface BedroomSceneProps {
   state: SessionState;
@@ -14,6 +14,7 @@ interface BedroomSceneProps {
   userVolume: number;
   airaVolume: number;
   isMicActive: boolean;
+  bedroomMood?: BedroomMood;
 }
 
 export const BedroomScene: React.FC<BedroomSceneProps> = ({
@@ -22,6 +23,7 @@ export const BedroomScene: React.FC<BedroomSceneProps> = ({
   mouthOpenness,
   userVolume,
   airaVolume,
+  bedroomMood = "cozy_candle",
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const animFrameId = useRef<number | null>(null);
@@ -33,6 +35,7 @@ export const BedroomScene: React.FC<BedroomSceneProps> = ({
     mouthOpenness,
     userVolume,
     airaVolume,
+    bedroomMood,
     targetMouse: { x: 0, y: 0 },
     currentMouse: { x: 0, y: 0 },
   });
@@ -44,7 +47,8 @@ export const BedroomScene: React.FC<BedroomSceneProps> = ({
     sceneStateRef.current.mouthOpenness = mouthOpenness;
     sceneStateRef.current.userVolume = userVolume;
     sceneStateRef.current.airaVolume = airaVolume;
-  }, [state, emotion, mouthOpenness, userVolume, airaVolume]);
+    sceneStateRef.current.bedroomMood = bedroomMood;
+  }, [state, emotion, mouthOpenness, userVolume, airaVolume, bedroomMood]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -448,6 +452,51 @@ export const BedroomScene: React.FC<BedroomSceneProps> = ({
     mouthGroup.add(mouthCavity);
 
     headGroup.add(mouthGroup);
+
+    // Cheeks Blush (Appears when romantic, flirty, laughing, or shy)
+    const blushMat = new THREE.MeshBasicMaterial({ color: 0xff6688, transparent: true, opacity: 0.15 });
+    const blushGeo = new THREE.CircleGeometry(0.026, 12);
+    const blushL = new THREE.Mesh(blushGeo, blushMat);
+    blushL.position.set(-0.088, -0.015, 0.165);
+    blushL.rotation.y = -0.25;
+    headGroup.add(blushL);
+
+    const blushR = new THREE.Mesh(blushGeo, blushMat);
+    blushR.position.set(0.088, -0.015, 0.165);
+    blushR.rotation.y = 0.25;
+    headGroup.add(blushR);
+
+    // Glistening Tear Drops for Crying Emotion
+    const tearMat = new THREE.MeshBasicMaterial({ color: 0x99ddff, transparent: true, opacity: 0.85 });
+    const tearGeo = new THREE.SphereGeometry(0.007, 8, 8);
+    const tearL = new THREE.Mesh(tearGeo, tearMat);
+    tearL.position.set(-0.065, -0.01, 0.175);
+    tearL.visible = false;
+    headGroup.add(tearL);
+
+    const tearR = new THREE.Mesh(tearGeo, tearMat);
+    tearR.position.set(0.065, -0.01, 0.175);
+    tearR.visible = false;
+    headGroup.add(tearR);
+
+    // Floating 3D Musical Notes / Sparkles for Singing
+    const musicalNotesGroup = new THREE.Group();
+    const noteColors = [0xff77aa, 0x77ddff, 0xffdd66, 0xaa88ff];
+    const notesMeshes: THREE.Mesh[] = [];
+    for (let i = 0; i < 6; i++) {
+      const noteGeo = new THREE.BoxGeometry(0.035, 0.035, 0.005);
+      const noteMat = new THREE.MeshBasicMaterial({ color: noteColors[i % noteColors.length], transparent: true, opacity: 0 });
+      const noteMesh = new THREE.Mesh(noteGeo, noteMat);
+      noteMesh.position.set(
+        (Math.random() - 0.5) * 0.8,
+        0.8 + Math.random() * 0.5,
+        (Math.random() - 0.5) * 0.4
+      );
+      musicalNotesGroup.add(noteMesh);
+      notesMeshes.push(noteMesh);
+    }
+    airaGroup.add(musicalNotesGroup);
+
     torsoGroup.add(headGroup);
     airaGroup.add(torsoGroup);
     scene.add(airaGroup);
@@ -487,12 +536,46 @@ export const BedroomScene: React.FC<BedroomSceneProps> = ({
       sweaterBody.scale.x = 1.0 + breathing * 0.02;
       sweaterBody.scale.z = 1.0 + breathing * 0.02;
 
-      // 2. Head Orientation & Conversational Focus
+      // 2. Head Orientation, Conversational Focus & Dynamic Emotion Postures
       let targetHeadPitch = 0;
       let targetHeadYaw = 0;
       let targetHeadRoll = 0;
 
-      if (cur.state === "LISTENING") {
+      // Emotion-specific posture overrides
+      if (cur.emotion === "LAUGHING") {
+        // Joyful laughter head bobbing and chuckling
+        const laughBob = Math.sin(elapsed * 15) * 0.05;
+        targetHeadPitch = 0.04 + laughBob;
+        targetHeadRoll = Math.sin(elapsed * 7.5) * 0.03;
+        targetHeadYaw = cur.currentMouse.x * 0.12;
+        torsoGroup.position.y += Math.abs(laughBob) * 0.008;
+      } else if (cur.emotion === "CRYING") {
+        // Vulnerable emotional downward tilt, subtle tremolo
+        const cryTremor = Math.sin(elapsed * 24) * 0.008;
+        targetHeadPitch = 0.12 + cryTremor;
+        targetHeadRoll = -0.04;
+        targetHeadYaw = cur.currentMouse.x * 0.06;
+      } else if (cur.emotion === "EGO") {
+        // Haughty, confident high-attitude tilt
+        targetHeadPitch = -0.16;
+        targetHeadYaw = -0.12 + cur.currentMouse.x * 0.1;
+        targetHeadRoll = 0.07;
+      } else if (cur.emotion === "POUTING") {
+        // Pouting turned slightly away with slight chin down
+        targetHeadYaw = -0.2 + cur.currentMouse.x * 0.08;
+        targetHeadPitch = 0.06;
+        targetHeadRoll = -0.05;
+      } else if (cur.emotion === "SINGING") {
+        // Melodic sway with musical rhythm
+        targetHeadRoll = Math.sin(elapsed * 3.2) * 0.07;
+        targetHeadPitch = Math.sin(elapsed * 2.0) * 0.05;
+        targetHeadYaw = Math.sin(elapsed * 1.6) * 0.08 + cur.currentMouse.x * 0.1;
+      } else if (cur.emotion === "ROMANTIC" || cur.emotion === "FLIRTY") {
+        // Gentle affectionate head tilt
+        targetHeadPitch = -0.04;
+        targetHeadRoll = 0.07;
+        targetHeadYaw = cur.currentMouse.x * 0.14;
+      } else if (cur.state === "LISTENING") {
         // Attentive tilt when listening to user
         targetHeadPitch = 0.08 + Math.sin(elapsed * 3) * 0.02;
         targetHeadRoll = -0.06;
@@ -542,44 +625,136 @@ export const BedroomScene: React.FC<BedroomSceneProps> = ({
         if (blinkProgress >= Math.PI) {
           isBlinking = false;
           nextBlinkTime = elapsed + 2.5 + Math.random() * 3.5;
-          leftEye.eyelid.scale.y = 0;
-          rightEye.eyelid.scale.y = 0;
+          leftEye.eyelid.scale.y = cur.emotion === "ROMANTIC" || cur.emotion === "FLIRTY" ? 0.28 : 0;
+          rightEye.eyelid.scale.y = cur.emotion === "ROMANTIC" || cur.emotion === "FLIRTY" ? 0.28 : 0;
         } else {
           const blinkValue = Math.sin(blinkProgress);
           leftEye.eyelid.scale.y = blinkValue * 1.05;
           rightEye.eyelid.scale.y = blinkValue * 1.05;
         }
+      } else if (cur.emotion === "ROMANTIC" || cur.emotion === "FLIRTY") {
+        // Bedroom gaze: relaxed lowered eyelids
+        leftEye.eyelid.scale.y = 0.28;
+        rightEye.eyelid.scale.y = 0.28;
+      } else {
+        leftEye.eyelid.scale.y = 0;
+        rightEye.eyelid.scale.y = 0;
       }
 
-      // 5. Lip Sync & Mouth Articulation (Section 11 & 12 of PRD)
-      // Driven directly by the real-time audio reactive openness value
+      // 5. Lip Sync & Mouth Articulation
       const openness = cur.mouthOpenness;
-      // Animate lips opening vertically and lower lip dropping
       lowerLip.position.y = -0.008 - openness * 0.028;
       upperLip.position.y = 0.008 + openness * 0.012;
-      // Stretch mouth cavity vertically
-      mouthCavity.scale.y = openness * 1.4;
+      mouthCavity.scale.y = Math.max(0.1, openness * 1.4);
       mouthCavity.scale.x = 0.8 + openness * 0.4;
 
-      // 6. Facial Expressions based on Emotion
-      if (cur.emotion === "HAPPY" || cur.emotion === "AMUSED" || cur.emotion === "PLAYFUL") {
-        // Gentle smile curve
+      // 6. Detailed Facial Expressions based on Rich Emotions
+      // Cheek blush dynamics
+      if (cur.emotion === "ROMANTIC" || cur.emotion === "FLIRTY" || cur.emotion === "LAUGHING" || cur.emotion === "PLAYFUL") {
+        blushMat.opacity += (0.65 - blushMat.opacity) * 0.06;
+      } else {
+        blushMat.opacity += (0.12 - blushMat.opacity) * 0.04;
+      }
+
+      // Tear dynamics for Crying
+      if (cur.emotion === "CRYING") {
+        tearL.visible = true;
+        tearR.visible = true;
+        const tearSlide = (elapsed * 0.05) % 0.055;
+        tearL.position.y = -0.01 - tearSlide;
+        tearR.position.y = -0.01 - tearSlide;
+        // Sad droop in outer eyebrows
+        browL.rotation.z = -0.22;
+        browR.rotation.z = 0.22;
+        browL.position.y = 0.075;
+        browR.position.y = 0.075;
+        upperLip.rotation.z = Math.PI / 2 - 0.06; // Downward lip curve
+      } else {
+        tearL.visible = false;
+        tearR.visible = false;
+      }
+
+      // Musical note particles for Singing
+      if (cur.emotion === "SINGING") {
+        musicalNotesGroup.visible = true;
+        notesMeshes.forEach((mesh, idx) => {
+          (mesh.material as THREE.MeshBasicMaterial).opacity = 0.7 + Math.sin(elapsed * 4 + idx) * 0.3;
+          mesh.position.y = 0.8 + ((elapsed * 0.3 + idx * 0.2) % 0.8);
+          mesh.rotation.z += 0.02;
+        });
+      } else {
+        musicalNotesGroup.visible = false;
+      }
+
+      // Specific emotion facial shaping
+      if (cur.emotion === "LAUGHING") {
+        upperLip.rotation.z = Math.PI / 2 + 0.16; // Big cheerful smile
+        browL.position.y = 0.086;
+        browR.position.y = 0.086;
+        browL.rotation.z = 0.06;
+        browR.rotation.z = -0.06;
+        mouthCavity.scale.x = 1.25;
+      } else if (cur.emotion === "EGO") {
+        // High confidence smirk: left brow standard, right brow arched high with attitude
+        upperLip.rotation.z = Math.PI / 2 + 0.14;
+        browL.position.y = 0.076;
+        browR.position.y = 0.094;
+        browR.rotation.z = -0.16;
+      } else if (cur.emotion === "POUTING") {
+        // Cute pout
+        upperLip.rotation.z = Math.PI / 2;
+        browL.position.y = 0.08;
+        browR.position.y = 0.08;
+        browL.rotation.z = 0.18; // Furrowed
+        browR.rotation.z = -0.18;
+        mouthCavity.scale.x = 0.55;
+      } else if (cur.emotion === "HAPPY" || cur.emotion === "AMUSED" || cur.emotion === "PLAYFUL" || cur.emotion === "ROMANTIC" || cur.emotion === "FLIRTY") {
         upperLip.rotation.z = Math.PI / 2 + 0.1;
         browL.position.y = 0.082;
         browR.position.y = 0.082;
+        browL.rotation.z = 0.08;
+        browR.rotation.z = -0.08;
       } else if (cur.emotion === "THOUGHTFUL") {
         browL.position.y = 0.072;
-        browR.position.y = 0.086; // One eyebrow playfully raised
-      } else {
+        browR.position.y = 0.086;
+        upperLip.rotation.z = Math.PI / 2;
+      } else if (cur.emotion !== "CRYING") {
         upperLip.rotation.z = Math.PI / 2;
         browL.position.y = 0.078;
         browR.position.y = 0.078;
+        browL.rotation.z = 0.08;
+        browR.rotation.z = -0.08;
       }
 
-      // 7. Subtle Camera Breathing Parallax
-      camera.position.x = cur.currentMouse.x * 0.15;
-      camera.position.y = 1.42 + cur.currentMouse.y * 0.08 + Math.sin(elapsed * 0.6) * 0.015;
-      camera.lookAt(0, 1.35, -0.4);
+      // 7. Dynamic Bedroom Mood Lighting Tint
+      let targetLampColor = 0xffb366;
+      let targetAmbientColor = 0x2d2538;
+      if (cur.bedroomMood === "romantic_crimson") {
+        targetLampColor = 0xff4d79;
+        targetAmbientColor = 0x3d1425;
+      } else if (cur.bedroomMood === "cyber_neon") {
+        targetLampColor = 0x00e5ff;
+        targetAmbientColor = 0x22113a;
+      } else if (cur.bedroomMood === "midnight_dream") {
+        targetLampColor = 0x5577cc;
+        targetAmbientColor = 0x11162b;
+      } else if (cur.bedroomMood === "warm_sunset") {
+        targetLampColor = 0xff7733;
+        targetAmbientColor = 0x381f20;
+      } else if (cur.bedroomMood === "dim_sleep") {
+        targetLampColor = 0x664422;
+        targetAmbientColor = 0x120e18;
+      }
+      lampLight.color.lerp(new THREE.Color(targetLampColor), 0.03);
+      ambientLight.color.lerp(new THREE.Color(targetAmbientColor), 0.03);
+
+      // 8. Subtle Camera Breathing Parallax with mobile portrait compensation
+      const isMobilePortrait = camera.aspect < 0.78;
+      const baseCamY = isMobilePortrait ? 1.46 : 1.42;
+      const baseLookY = isMobilePortrait ? 1.38 : 1.35;
+      camera.position.x = cur.currentMouse.x * 0.12;
+      camera.position.y = baseCamY + cur.currentMouse.y * 0.06 + Math.sin(elapsed * 0.6) * 0.015;
+      camera.lookAt(0, baseLookY, -0.4);
 
       renderer.render(scene, camera);
     };
@@ -592,10 +767,13 @@ export const BedroomScene: React.FC<BedroomSceneProps> = ({
         const { width, height } = entry.contentRect;
         if (width === 0 || height === 0) return;
         camera.aspect = width / height;
-        // On narrow mobile screens, adjust camera field-of-view so AIRA stays nicely centered
-        if (width < 640) {
-          camera.fov = 48;
-          camera.position.z = 3.8;
+        // On narrow/mobile screens, adjust camera FOV & distance so AIRA stays framed above the controls
+        if (camera.aspect < 0.78) {
+          camera.fov = Math.min(54, Math.max(45, (38 / Math.max(camera.aspect, 0.42)) * 0.58));
+          camera.position.z = 3.75;
+        } else if (width < 900) {
+          camera.fov = 42;
+          camera.position.z = 3.5;
         } else {
           camera.fov = 38;
           camera.position.z = 3.4;

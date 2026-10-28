@@ -8,8 +8,11 @@
 }
 
 @layer base {
-  body {
+  html, body {
     @apply bg-[#020205] text-white;
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
   }
 }
 

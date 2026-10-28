@@ -15,6 +15,8 @@ import {
   AiraEmotion,
   NoteItem,
   ToolExecutionEvent,
+  BedroomMood,
+  RememberedPerson,
 } from "./types";
 
 export default function App() {
@@ -32,6 +34,18 @@ export default function App() {
   const [toolHistory, setToolHistory] = useState<ToolExecutionEvent[]>([]);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [reconnectCount, setReconnectCount] = useState(0);
+  const [bedroomMood, setBedroomMood] = useState<BedroomMood>("cozy_candle");
+  const [userName, setUserName] = useState<string>(
+    () => localStorage.getItem("aira_user_name") || ""
+  );
+  const [rememberedPerson, setRememberedPerson] = useState<RememberedPerson | null>(() => {
+    try {
+      const raw = localStorage.getItem("aira_remembered_person");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
   const [airaVoice, setAiraVoice] = useState<string>(
     () => localStorage.getItem("aira_voice") || "Aoede"
   );
@@ -96,13 +110,25 @@ export default function App() {
   // Update emotional state based on speech context & session state
   const deriveEmotionFromTranscript = (text: string) => {
     const lower = text.toLowerCase();
-    if (lower.includes("haha") || lower.includes("lol") || lower.includes("sassy") || lower.includes("ziddi") || lower.includes("👀")) {
-      setEmotion("PLAYFUL");
+    if (lower.includes("haha") || lower.includes("hehe") || lower.includes("lol") || lower.includes("lmao") || lower.includes("hans rahi")) {
+      setEmotion("LAUGHING");
+    } else if (lower.includes("cry") || lower.includes("rona") || lower.includes("sad") || lower.includes("rote") || lower.includes("aansoo") || lower.includes("dard") || lower.includes("heartbreak")) {
+      setEmotion("CRYING");
+    } else if (lower.includes("queen") || lower.includes("attitude") || lower.includes("nakhre") || lower.includes("ego") || lower.includes("meri marzi") || lower.includes("smartest") || lower.includes("best girlfriend")) {
+      setEmotion("EGO");
+    } else if (lower.includes("naraz") || lower.includes("pout") || lower.includes("gussa") || lower.includes("chup") || lower.includes("baat nahi karungi")) {
+      setEmotion("POUTING");
+    } else if (lower.includes("gaana") || lower.includes("song") || lower.includes("sing") || lower.includes("sur") || lower.includes("la la la") || lower.includes("tujhe dekha") || lower.includes("tum hi ho")) {
+      setEmotion("SINGING");
+    } else if (lower.includes("love") || lower.includes("pyar") || lower.includes("jaan") || lower.includes("babe") || lower.includes("sweetheart") || lower.includes("dil") || lower.includes("romantic")) {
+      setEmotion("ROMANTIC");
+    } else if (lower.includes("flirt") || lower.includes("sassy") || lower.includes("ziddi") || lower.includes("chhed")) {
+      setEmotion("FLIRTY");
     } else if (lower.includes("namaste") || lower.includes("shubh") || lower.includes("achha") || lower.includes("great") || lower.includes("khush")) {
       setEmotion("HAPPY");
     } else if (lower.includes("kyun") || lower.includes("kaise") || lower.includes("why") || lower.includes("soch") || lower.includes("hmmm")) {
       setEmotion("THOUGHTFUL");
-    } else if (lower.includes("sweet") || lower.includes("care") || lower.includes("relax") || lower.includes("pareshan mat ho")) {
+    } else if (lower.includes("relax") || lower.includes("care") || lower.includes("pareshan mat ho")) {
       setEmotion("SUPPORTIVE");
     } else {
       setEmotion("NEUTRAL");
@@ -116,17 +142,103 @@ export default function App() {
       type,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
-    setNotes((prev) => [...prev.slice(-20), newNote]);
+    setNotes((prev) => [...prev.slice(-25), newNote]);
   };
 
   const handleToolCall = (name: string, args: any) => {
     console.log("App handled tool execution:", name, args);
     let summary = name;
 
-    if (name === "playMusic") {
+    if (name === "rememberPerson") {
+      const person: RememberedPerson = {
+        name: args.name || "Beloved User",
+        nickname: args.nickname,
+        relation: args.relation || "Partner",
+        favoriteThings: Array.isArray(args.favoriteThings)
+          ? args.favoriteThings
+          : args.favoriteThings
+          ? [args.favoriteThings]
+          : [],
+        memory: args.memory,
+        lastUpdated: new Date().toLocaleDateString(),
+      };
+      setRememberedPerson(person);
+      setUserName(person.name);
+      try {
+        localStorage.setItem("aira_remembered_person", JSON.stringify(person));
+        localStorage.setItem("aira_user_name", person.name);
+      } catch {
+        // ignore
+      }
+      sessionRef.current?.setUserName(person.name);
+      addNote(
+        `Remembered: ${person.name}${person.relation ? ` (${person.relation})` : ""}${
+          person.memory ? ` - ${person.memory}` : ""
+        }`,
+        "PERSON_MEMORY"
+      );
+      setEmotion("ROMANTIC");
+      summary = `Remembered ${person.name} 💕`;
+    } else if (name === "singSong") {
+      setEmotion("SINGING");
+      addNote(
+        `AIRA sang: "${args.songTitle || "Romantic melody"}"${
+          args.lyricsSnippet ? ` ("${args.lyricsSnippet}")` : ""
+        }`,
+        "SONG"
+      );
+      summary = `AIRA is singing: "${args.songTitle || "Melody"}" 🎵`;
+    } else if (name === "expressEmotion") {
+      if (args.emotion) {
+        setEmotion(args.emotion as AiraEmotion);
+      }
+      addNote(`Emotion: ${args.emotion} - ${args.reason || ""}`, "EMOTION");
+      summary = `Expressed ${args.emotion} ${args.reason ? `(${args.reason})` : ""}`;
+    } else if (name === "setBedroomMood") {
+      if (args.mood) {
+        setBedroomMood(args.mood as BedroomMood);
+        addNote(`Bedroom atmosphere changed to ${args.mood.replace("_", " ")}`, "NOTE");
+        summary = `Atmosphere: ${args.mood.replace("_", " ")} 🕯️`;
+      }
+    } else if (name === "controlMusic") {
+      if (args.action === "pause") {
+        setIsMusicPaused(true);
+        if (musicFrameRef.current?.contentWindow) {
+          musicFrameRef.current.contentWindow.postMessage(
+            JSON.stringify({ event: "command", func: "pauseVideo", args: [] }),
+            "*"
+          );
+        }
+      } else if (args.action === "resume") {
+        setIsMusicPaused(false);
+        if (musicFrameRef.current?.contentWindow) {
+          musicFrameRef.current.contentWindow.postMessage(
+            JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+            "*"
+          );
+        }
+      } else if (args.action === "stop") {
+        handleStopMusic();
+      } else if (args.action === "setVolume" && typeof args.volume === "number") {
+        if (musicFrameRef.current?.contentWindow) {
+          musicFrameRef.current.contentWindow.postMessage(
+            JSON.stringify({ event: "command", func: "setVolume", args: [args.volume] }),
+            "*"
+          );
+        }
+      }
+      summary = `Music ${args.action}`;
+    } else if (name === "setReminder") {
+      addNote(`Reminder: ${args.reminderText || "Task"} (${args.timeOrDelay || "Scheduled"})`, "REMINDER");
+      summary = `Reminder set: "${args.reminderText}"`;
+    } else if (name === "getSystemTimeAndWeather") {
+      summary = `Time & climate checked`;
+      addNote(`System check: ${new Date().toLocaleTimeString()} - Cozy bedroom climate`, "NOTE");
+    } else if (name === "playMusic") {
       summary = `Playing "${args.query}"`;
       setNowPlaying(args.query);
       setIsMusicPaused(false);
+      setEmotion("ROMANTIC");
       addNote(`Music requested: ${args.query}`, "SONG");
       if (musicFrameRef.current) {
         musicFrameRef.current.src = `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(
@@ -134,10 +246,15 @@ export default function App() {
         )}&autoplay=1&enablejsapi=1`;
       }
     } else if (name === "addNote") {
-      summary = `Note saved`;
+      summary = `Note saved to memory`;
       addNote(args.content, args.type || "NOTE");
     } else if (name === "openWebsite") {
-      summary = `Opening ${args.url}`;
+      summary = `Opening ${args.label || args.url}`;
+      try {
+        window.open(args.url, "_blank");
+      } catch {
+        // ignore
+      }
     }
 
     const event: ToolExecutionEvent = {
@@ -279,8 +396,36 @@ export default function App() {
       }
     );
 
+    if (userName) {
+      session.setUserName(userName);
+    }
+
     sessionRef.current = session;
     return session;
+  };
+
+  const handleClearIdentity = () => {
+    setUserName("");
+    setRememberedPerson(null);
+    try {
+      localStorage.removeItem("aira_user_name");
+      localStorage.removeItem("aira_remembered_person");
+    } catch {
+      // ignore
+    }
+    sessionRef.current?.clearUserName();
+    addNote("User memory reset. AIRA will ask who you are on next meeting.", "NOTE");
+    setEmotion("THOUGHTFUL");
+  };
+
+  const handleTriggerEmotion = (emo: AiraEmotion) => {
+    setEmotion(emo);
+    addNote(`Emote triggered: ${emo}`, "EMOTION");
+  };
+
+  const handleSelectBedroomMood = (mood: BedroomMood) => {
+    setBedroomMood(mood);
+    addNote(`Lighting adjusted to ${mood.replace("_", " ")}`, "NOTE");
   };
 
   const handleToggleSession = async () => {
@@ -359,7 +504,7 @@ export default function App() {
   }, []);
 
   return (
-    <main className="relative w-screen h-screen overflow-hidden bg-[#0c0d14] text-white">
+    <main className="relative w-full h-[100dvh] overflow-hidden bg-[#0c0d14] text-white select-none">
       {/* 3D BEDROOM SCENE WITH AIRA SEATED NATURALLY */}
       <BedroomScene
         state={state}
@@ -368,11 +513,15 @@ export default function App() {
         userVolume={userVolume}
         airaVolume={airaVolume}
         isMicActive={isMicActive}
+        bedroomMood={bedroomMood}
       />
 
       {/* MINIMAL CONVERSATIONAL OVERLAY */}
       <ConversationUI
         state={state}
+        emotion={emotion}
+        userName={userName}
+        rememberedPerson={rememberedPerson}
         isMicActive={isMicActive}
         userVolume={userVolume}
         airaVolume={airaVolume}
@@ -416,6 +565,12 @@ export default function App() {
         wakeWordStatus={wakeWordStatus}
         currentVoice={airaVoice}
         onSelectVoice={handleSelectVoice}
+        userName={userName}
+        rememberedPerson={rememberedPerson}
+        bedroomMood={bedroomMood}
+        onSelectBedroomMood={handleSelectBedroomMood}
+        onTriggerEmotion={handleTriggerEmotion}
+        onClearIdentity={handleClearIdentity}
       />
 
       {/* HIDDEN MUSIC PLAYER FOR playMusic TOOL WITH DUCKING */}

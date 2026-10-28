@@ -110,7 +110,10 @@ export class LiveSession {
       try {
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
         const savedVoice = localStorage.getItem("aira_voice") || "Aoede";
-        const wsUrl = `${protocol}//${window.location.host}/ws/live?voice=${encodeURIComponent(savedVoice)}`;
+        const savedName = this.userName || localStorage.getItem("aira_user_name") || "";
+        const wsUrl = `${protocol}//${window.location.host}/ws/live?voice=${encodeURIComponent(savedVoice)}${
+          savedName ? `&userName=${encodeURIComponent(savedName)}` : ""
+        }`;
         console.log("Connecting to AIRA WebSocket bridge:", wsUrl);
 
         const socket = new WebSocket(wsUrl);
@@ -204,21 +207,50 @@ export class LiveSession {
   /**
    * Memory & Name Recognition
    */
+  public getUserName(): string {
+    return this.userName || localStorage.getItem("aira_user_name") || "";
+  }
+
+  public setUserName(name: string) {
+    this.userName = name.trim();
+    try {
+      localStorage.setItem("aira_user_name", this.userName);
+    } catch {
+      // ignore
+    }
+  }
+
+  public clearUserName() {
+    this.userName = "";
+    try {
+      localStorage.removeItem("aira_user_name");
+      localStorage.removeItem("aira_remembered_person");
+    } catch {
+      // ignore
+    }
+  }
+
   private detectAndRememberName(text: string, role: "user" | "model") {
     if (role === "user") {
-      const lower = text.toLowerCase();
+      const lower = text.toLowerCase().trim();
+      // Match common intro phrases
       const match =
-        text.match(/(?:mera naam|my name is|i am|call me|naam hai)\s+([A-Za-z\u0900-\u097F]+)/i) ||
-        (lower.startsWith("i'm ") ? text.match(/i'm\s+([A-Za-z]+)/i) : null);
+        text.match(/(?:mera naam|my name is|i am|call me|naam hai|this is|naam mera)\s+([A-Za-z\u0900-\u097F]+)/i) ||
+        (lower.startsWith("i'm ") ? text.match(/i'm\s+([A-Za-z\u0900-\u097F]+)/i) : null) ||
+        (lower.startsWith("main ") ? text.match(/main\s+([A-Za-z\u0900-\u097F]+)\s*(?:hoon|hun)?/i) : null);
+
       if (match && match[1]) {
-        const name = match[1].trim();
-        this.userName = name.charAt(0).toUpperCase() + name.slice(1);
-        try {
-          localStorage.setItem("aira_user_name", this.userName);
-        } catch {
-          // ignore
+        const rawName = match[1].trim();
+        // Ignore generic words like "fine", "good", "theek", "here"
+        if (!["fine", "good", "theek", "here", "ready", "listening"].includes(rawName.toLowerCase())) {
+          this.userName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+          try {
+            localStorage.setItem("aira_user_name", this.userName);
+          } catch {
+            // ignore
+          }
+          console.log("AIRA remembered user name:", this.userName);
         }
-        console.log("AIRA remembered user name:", this.userName);
       }
     }
   }
@@ -314,7 +346,13 @@ export class LiveSession {
     }
 
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
+    // Ensure proper pronunciation of AIRA's name ("Aayra" / "ऐरा")
+    // Never let browser speech synthesis spell it out letter-by-letter "A - I - R - A"
+    const pronounceableText = text
+      .replace(/\bA\.I\.R\.A\.?\b/gi, "Aayra")
+      .replace(/\bAIRA\b/g, "Aayra")
+      .replace(/\bAira\b/g, "Aayra");
+    const utterance = new SpeechSynthesisUtterance(pronounceableText);
 
     // Pick a warm, mature female Hindi or English voice
     const voices = window.speechSynthesis.getVoices();
